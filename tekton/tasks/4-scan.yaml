@@ -1,0 +1,32 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: scan-dev
+  namespace: mq
+spec:
+  params:
+    - name: BASE_IMAGE
+      default: registry.redhat.io/rhel8/buildah@sha256:99cae35f40c7ec050fed3765b2b27e0b8bbea2aa2da7c16408e2ca13c60ff8ee
+    - name: source-dir
+    - name: subdirectory
+  volumes:
+    - name: source
+      persistentVolumeClaim:
+        claimName: tekton-pvc
+  stepTemplate:
+    volumeMounts:
+      - name: source
+        mountPath: $(params.source-dir)
+  results:
+    - description: Digest of the image just built.
+      name: IMAGE_DIGEST
+  steps:
+    - name: buildah
+      image: $(params.BASE_IMAGE)
+      resources: {}
+      script: |
+
+        # Setting up the config for the git.
+        pwd
+        ls
+      workingDir: $(params.source-dir)/$(params.subdirectory)

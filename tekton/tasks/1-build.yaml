@@ -1,0 +1,58 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-dev
+  namespace: mq
+spec:
+  params:
+    # for git cli
+    - name: IMAGE
+    - name: IMAGE_TAG
+    - name: subdirectory
+    - name: source-dir
+    - name: BUILDER_IMAGE
+    - default: vfs
+      name: STORAGE_DRIVER
+    - default: Dockerfile
+      name: DOCKERFILE
+    - default: .
+      name: CONTEXT
+    - default: "false"
+      name: TLSVERIFY
+    - default: oci
+      name: FORMAT
+    - default: ""
+      name: BUILD_EXTRA_ARGS
+    - default: ""
+      name: PUSH_EXTRA_ARGS
+  volumes:
+    - name: source
+      persistentVolumeClaim:
+        claimName: tekton-pvc
+  stepTemplate:
+    volumeMounts:
+      - name: source
+        mountPath: $(params.source-dir)
+  # resources:
+  #   outputs:
+  #     - name: builtImage
+  #       type: image
+  steps:
+    - name: build
+      image: $(params.BUILDER_IMAGE)
+      script: |
+        pwd
+        ls
+        buildah --storage-driver=$(params.STORAGE_DRIVER) bud \
+          $(params.BUILD_EXTRA_ARGS) --format=$(params.FORMAT) \
+          --tls-verify=$(params.TLSVERIFY) --no-cache \
+          -f $(params.DOCKERFILE) -t $(params.IMAGE):$(params.IMAGE_TAG) $(params.CONTEXT)
+
+        buildah images
+
+        buildah --storage-driver=$(params.STORAGE_DRIVER) push \
+          $(params.PUSH_EXTRA_ARGS) --tls-verify=$(params.TLSVERIFY) \
+          --digestfile $(params.source-dir)/image-digest $(params.IMAGE):$(params.IMAGE_TAG) \
+          docker://$(params.IMAGE)
+        ls
+      workingDir: $(params.source-dir)/$(params.subdirectory)

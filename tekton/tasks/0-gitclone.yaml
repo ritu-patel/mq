@@ -1,0 +1,66 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-dev
+  namespace: mq
+spec:
+  params:
+    - name: BASE_IMAGE
+    - name: GIT_SCRIPT
+    - name: GIT_SECRET
+    - name: source-dir
+    - name: subdirectory
+  volumes:
+    - name: source
+      persistentVolumeClaim:
+        claimName: tekton-pvc
+  stepTemplate:
+    volumeMounts:
+      - name: source
+        mountPath: $(params.source-dir)
+  steps:
+    - name: git-cli
+      image: $(params.BASE_IMAGE)
+      env:
+        - name: GIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: $(params.GIT_SECRET)
+              key: password
+              optional: true
+        - name: GIT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: $(params.GIT_SECRET)
+              key: username
+              optional: true
+        - name: GIT_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: $(params.GIT_SECRET)
+              key: email
+              optional: true
+      resources: {}
+      script: |
+
+        # Setting up the config for the git.
+        pwd
+        ls
+        rm -rf $(params.subdirectory)
+
+        git config --global user.email "$GIT_EMAIL"
+        git config --global user.name "$GIT_USERNAME"
+
+        $(params.GIT_SCRIPT)
+
+        RESULT_SHA="$(git rev-parse HEAD | tr -d '\n')"
+        EXIT_CODE="$?"
+        if [ "$EXIT_CODE" != 0 ]
+        then
+          exit $EXIT_CODE
+        fi
+        ls
+        ls $(params.subdirectory)
+        ls
+        pwd
+      workingDir: $(params.source-dir)

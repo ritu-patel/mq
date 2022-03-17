@@ -1,0 +1,99 @@
+---
+# Source: qm1-smoke/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mqsc-configmap-smoke
+data:
+  config.mqsc: |
+    define ql(APPQ)
+    define ql(REQUEST)
+    define ql(REPLY)
+    DEFINE QLOCAL(IBM.DEMO.Q) BOQNAME(IBM.DEMO.Q.BOQ) BOTHRESH(3) REPLACE
+    DEFINE QLOCAL(IBM.DEMO.Q.BOQ) REPLACE
+    * Use a different dead letter queue, for undeliverable messages
+    DEFINE QLOCAL('DEV.DEAD.LETTER.QUEUE') REPLACE
+    ALTER QMGR DEADQ('DEV.DEAD.LETTER.QUEUE')
+    DEFINE CHANNEL('IBM.APP.SVRCONN') CHLTYPE(SVRCONN)
+    ALTER QMGR CHLAUTH (DISABLED)
+    REFRESH SECURITY TYPE(CONNAUTH)
+---
+# Source: qm1-smoke/templates/qm-template.yaml
+apiVersion: mq.ibm.com/v1beta1
+kind: QueueManager
+metadata:
+  name: qm1-smoke
+  annotations:
+    argocd.argoproj.io/sync-wave: "300"
+    helm.sh/hook-weight: "300"
+spec:
+  license:
+    accept: true
+    
+    license: L-RJON-BZFQU2
+    
+    use: NonProduction
+  queueManager:
+    debug: false
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 1
+      initialDelaySeconds: 90
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 5
+    logFormat: Basic
+    metrics:
+      enabled: true
+    name: QM1
+    readinessProbe:
+      failureThreshold: 1
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      successThreshold: 1
+      timeoutSeconds: 3
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    
+    availability:
+      type: SingleInstance
+    
+    image: "image-registry.openshift-image-registry.svc:5000/mq/pipeline-mq:v1"
+    imagePullPolicy: Always
+    mqsc:
+    - configMap:
+        name: mqsc-configmap-smoke
+        items:
+        - config.mqsc
+    
+    storage:
+      persistedData:
+        enabled: false
+      queueManager:
+        type: ephemeral
+      recoveryLogs:
+        enabled: false
+    
+  securityContext:
+    initVolumeAsRoot: false
+  template:
+    pod:
+      containers:
+      - name: qmgr
+        env:
+        - name: MQSNOAUT
+          value: "yes"
+  terminationGracePeriodSeconds: 30
+  tracing:
+    agent: {}
+    collector: {}
+    enabled: false
+    namespace: ""
+  version: 9.2.4.0-r1
+  web:
+    enabled: true

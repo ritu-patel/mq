@@ -1,0 +1,111 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: custom-image-dev
+  namespace: mq
+spec:
+  tasks:
+    - name: git-clone-dev
+      params:
+        - name: BASE_IMAGE
+          value: docker.io/alpine/git:v2.26.2@sha256:23618034b0be9205d9cc0846eb711b12ba4c9b468efdd8a59aac1d7b1a23363f
+        - name: GIT_SECRET
+          value: "git-credentials"
+        - name: GIT_SCRIPT
+          value: "git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/IBMMQAutomation/base-image.git"
+        - name: subdirectory
+          value: "base-image"
+        - name: source-dir
+          value: /source
+      taskRef:
+        kind: Task
+        name: git-clone-dev
+
+    - name: build-dev
+      params:
+        - name: BUILDER_IMAGE
+          value: registry.redhat.io/rhel8/buildah@sha256:99cae35f40c7ec050fed3765b2b27e0b8bbea2aa2da7c16408e2ca13c60ff8ee
+        - name: subdirectory
+          value: "base-image"
+        - name: source-dir
+          value: /source
+        - name: TLSVERIFY
+          value: "false"
+        - name: IMAGE
+          value: "image-registry.openshift-image-registry.svc:5000/mq/pipeline-mq"
+        - name: IMAGE_TAG
+          value: "v2"
+      taskRef:
+        kind: Task
+        name: build-dev
+      runAfter:
+        - git-clone-dev
+
+    - name: smoke-test-dev
+      params:
+        - name: source-dir
+          value: /source
+        - name: app-namespace
+          value: "mq"
+        - name: app-name
+          value: "qm1-smoke" # must be same as QM name https://github.com/IBMMQAutomation/base-image/blob/main/chart/base/values.yaml
+        - name: tools-image
+          value: "quay.io/ibmgaragecloud/ibmcloud-dev:v2.0.4"
+        - name: subdirectory
+          value: base-image
+
+      taskRef:
+        kind: Task
+        name: smoke-test-dev
+      runAfter:
+        - build-dev
+
+    - name: cphtestp-performance-test-dev
+      params:
+        - name: source-dir
+          value: /source
+        - name: subdirectory
+          value: base-image
+        - name: app-namespace
+          value: "mq"
+        - name: app-name
+          value: "qm1-smoke" # same as qm name on https://github.com/IBMMQAutomation/base-image/blob/main/release.yaml
+        - name: qm-security
+          value: "false"
+      taskRef:
+        kind: Task
+        name: cphtestp-performance-test-dev
+      runAfter:
+        - smoke-test-dev
+
+    - name: scan-dev
+      params:
+        - name: source-dir
+          value: /source
+        - name: BASE_IMAGE
+          value: registry.redhat.io/rhel8/buildah@sha256:99cae35f40c7ec050fed3765b2b27e0b8bbea2aa2da7c16408e2ca13c60ff8ee
+        - name: subdirectory
+          value: "base-image"
+      taskRef:
+        kind: Task
+        name: scan-dev
+      runAfter:
+        - cphtestp-performance-test-dev
+
+    - name: push-dev
+      params:
+        - name: subdirectory
+          value: "base-image"
+        - name: source-dir
+          value: /source
+        - name: TLSVERIFY
+          value: "false"
+        - name: IMAGE
+          value: "image-registry.openshift-image-registry.svc:5000/mq/pipeline-mq"
+        - name: IMAGE_TAG
+          value: "v2"
+      taskRef:
+        kind: Task
+        name: push-dev
+      runAfter:
+        - scan-dev

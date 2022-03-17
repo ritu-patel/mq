@@ -1,0 +1,51 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: push-dev
+  namespace: mq
+spec:
+  params:
+    - name: IMAGE
+    - name: IMAGE_TAG
+    - name: subdirectory
+    - name: source-dir
+    - name: BUILDER_IMAGE
+      default: >-
+        registry.redhat.io/rhel8/buildah@sha256:99cae35f40c7ec050fed3765b2b27e0b8bbea2aa2da7c16408e2ca13c60ff8ee
+    - default: vfs
+      name: STORAGE_DRIVER
+    - default: Dockerfile
+      name: DOCKERFILE
+    - default: .
+      name: CONTEXT
+    - default: "false"
+      name: TLSVERIFY
+    - default: oci
+      name: FORMAT
+    - default: ""
+      name: BUILD_EXTRA_ARGS
+    - default: ""
+      name: PUSH_EXTRA_ARGS
+  volumes:
+    - name: source
+      persistentVolumeClaim:
+        claimName: tekton-pvc
+  stepTemplate:
+    volumeMounts:
+      - name: source
+        mountPath: $(params.source-dir)
+  steps:
+    - name: push
+      image: $(params.BUILDER_IMAGE)
+      resources: {}
+      script: |
+        pwd
+        ls
+        # buildah images
+        # buildah --storage-driver=$(params.STORAGE_DRIVER) push \
+        #   $(params.PUSH_EXTRA_ARGS) --tls-verify=$(params.TLSVERIFY) \
+        #   --digestfile $(params.source-dir)/image-digest $(resources.inputs.image.url) \
+        #   docker://$(resources.inputs.image.url)
+        echo "Done pushing the image to OCP registry"
+        echo $(params.IMAGE)
+      workingDir: $(params.source-dir)/$(params.subdirectory)
